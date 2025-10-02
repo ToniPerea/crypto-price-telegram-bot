@@ -63,25 +63,37 @@ async function deleteMessage(msgId: number) {
 
 async function pinMessage(msgId: number) {
   try {
-    await fetch(`${TELEGRAM_API}/pinChatMessage`, {
+    const res = await fetch(`${TELEGRAM_API}/pinChatMessage`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chat_id: CHAT_ID, message_id: msgId })
+      body: JSON.stringify({ chat_id: CHAT_ID, message_id: msgId, disable_notification: true })
     });
+    const j = await res.json();
+    if (!j.ok) {
+      console.error("⚠️ No se pudo pinear mensaje:", j.description);
+    } else {
+      console.log("📌 Mensaje pineado:", msgId);
+    }
   } catch (e) {
-    console.error("Error pineando mensaje:", e);
+    console.error("❌ Error pineando mensaje:", e);
   }
 }
 
 async function unpinMessage(msgId: number) {
   try {
-    await fetch(`${TELEGRAM_API}/unpinChatMessage`, {
+    const res = await fetch(`${TELEGRAM_API}/unpinChatMessage`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chat_id: CHAT_ID, message_id: msgId })
     });
+    const j = await res.json();
+    if (!j.ok) {
+      console.error("⚠️ No se pudo despinear mensaje:", j.description);
+    } else {
+      console.log("📍 Mensaje despineado:", msgId);
+    }
   } catch (e) {
-    console.error("Error despineando mensaje:", e);
+    console.error("❌ Error despineando mensaje:", e);
   }
 }
 
