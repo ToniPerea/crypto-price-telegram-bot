@@ -4,8 +4,19 @@ const CHAT_ID = Deno.env.get("TG_CHAT_ID")!; // ej: -123456789
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
 
-// Variable para guardar el último message_id en memoria
-let lastMessageId: number | null = null;
+// Abrir Deno KV para guardar message_id
+const kv = await Deno.openKv();
+
+// Función para obtener el último message_id guardado
+async function getLastMessageId(): Promise<number | null> {
+  const res = await kv.get(["xrp_bot", "lastMessageId"]);
+  return res.value ?? null;
+}
+
+// Función para guardar el message_id
+async function setLastMessageId(id: number) {
+  await kv.set(["xrp_bot", "lastMessageId"], id);
+}
 
 // Obtener precios de XRP
 async function getPrices() {
@@ -74,6 +85,7 @@ async function sendOrEditMessage(text: string) {
     }
   } catch (e: any) {
     if (e.message.includes("not found")) {
+      // Si no se encuentra el mensaje, enviar uno nuevo
       messageId = await sendMessage(text);
       await setLastMessageId(messageId);
     } else {
@@ -85,15 +97,15 @@ async function sendOrEditMessage(text: string) {
 // Cron oficial Deno: cada minuto
 Deno.cron("update-xrp", "*/1 * * * *", async () => {
   try {
+    console.log("Actualizando precios...");
     const prices = await getPrices();
     const text = formatText(prices);
-    await sendOrEditMessage(text); // esta función ahora maneja not found
+    await sendOrEditMessage(text);
     console.log("✅ Mensaje actualizado:", new Date().toISOString());
   } catch (e) {
     console.error("❌ Error en cron:", e);
   }
 });
-
 
 // Servidor HTTP mínimo para que Deploy lo acepte
 Deno.serve((_req) => new Response("Bot XRP corriendo ✅"));
