@@ -130,7 +130,12 @@ function formatText(data: any) {
     }
   }
 
-  lines.push(`<i>Última actualización: ${new Date().toUTCString()}</i>`);
+  const spainTime = new Date().toLocaleString('es-ES', { 
+    timeZone: 'Europe/Madrid',
+    dateStyle: 'short',
+    timeStyle: 'medium'
+  });
+  lines.push(`<i>Última actualización: ${spainTime} (España)</i>`);
   return lines.join("\n");
 }
 
@@ -148,7 +153,7 @@ async function sendOrUpdateMessage(text: string) {
 
   const ageHours = (now - message.timestamp) / 1000 / 3600;
 
-  if (ageHours >= 24) {
+  if (ageHours >= 46) {
     // Despinear y borrar el mensaje antiguo
     await unpinMessage(message.id);
     await deleteMessage(message.id);
@@ -186,5 +191,5 @@ async function loop() {
   }
 }
 
-loop();
 Deno.serve((_req) => new Response("Bot XRP corriendo ✅"));
+loop();
