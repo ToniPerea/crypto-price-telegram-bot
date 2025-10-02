@@ -1,9 +1,11 @@
 // crypto-price-bot.ts - Bot de Telegram en TypeScript para Deno Deploy
 const BOT_TOKEN = Deno.env.get("TG_BOT_TOKEN")!;
 const CHAT_ID = Deno.env.get("TG_CHAT_ID")!; // ej: -123456789
-const MESSAGE_ID = parseInt(Deno.env.get("TG_MESSAGE_ID")!); // ID del mensaje a editar
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
+
+// Variable para guardar el último message_id en memoria
+let lastMessageId: number | null = null;
 
 // Obtener precios de XRP
 async function getPrices() {
@@ -38,24 +40,52 @@ async function editMessage(msgId: number, text: string) {
       parse_mode: "HTML"
     })
   });
-  
   const j = await res.json();
-  
-  if (!j.ok) {
-    console.error("Error editando mensaje:", j.description);
-    throw new Error(`Telegram error: ${j.description}`);
-  }
-  
+  if (!j.ok) throw new Error(j.description);
   return j;
 }
 
-// Cron oficial Deno: cada minuto (minuto hora día mes día-semana)
+// Enviar mensaje nuevo
+async function sendMessage(text: string) {
+  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      chat_id: CHAT_ID,
+      text,
+      parse_mode: "HTML"
+    })
+  });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.description);
+  return j.result.message_id;
+}
+
+// Función que edita o envía según corresponda
+async function sendOrEditMessage(text: string) {
+  try {
+    if (lastMessageId) {
+      await editMessage(lastMessageId, text);
+    } else {
+      lastMessageId = await sendMessage(text);
+    }
+  } catch (e: any) {
+    if (e.message.includes("not found")) {
+      // Si no se encuentra el mensaje, enviar uno nuevo
+      lastMessageId = await sendMessage(text);
+    } else {
+      throw e;
+    }
+  }
+}
+
+// Cron oficial Deno: cada minuto
 Deno.cron("update-xrp", "*/1 * * * *", async () => {
   try {
     console.log("Actualizando precios...");
     const prices = await getPrices();
     const text = formatText(prices);
-    await editMessage(MESSAGE_ID, text);
+    await sendOrEditMessage(text);
     console.log("✅ Mensaje actualizado:", new Date().toISOString());
   } catch (e) {
     console.error("❌ Error en cron:", e);
