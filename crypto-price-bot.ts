@@ -5,8 +5,6 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
 
 // -------------------- Funciones para Deno KV --------------------
-
-// Abrir KV dentro de cada función para evitar problemas con top-level await
 async function getKv() {
   return await Deno.openKv();
 }
@@ -23,7 +21,6 @@ async function setLastMessageId(id: number) {
 }
 
 // -------------------- Funciones de Telegram --------------------
-
 async function sendMessage(text: string) {
   const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
@@ -56,7 +53,6 @@ async function editMessage(msgId: number, text: string) {
 }
 
 // -------------------- Función de precios --------------------
-
 async function getPrices() {
   const url = `${COINGECKO_URL}?ids=ripple&vs_currencies=usd,eur&include_24hr_change=true`;
   try {
@@ -83,7 +79,6 @@ function formatText(data: { ripple: { usd: number; eur: number; usd_24h_change: 
 }
 
 // -------------------- Función principal --------------------
-
 async function sendOrEditMessage(text: string) {
   let messageId = await getLastMessageId();
 
@@ -96,7 +91,6 @@ async function sendOrEditMessage(text: string) {
     }
   } catch (e: any) {
     if (e.message.includes("not found")) {
-      // Si no se encuentra el mensaje, enviar uno nuevo
       messageId = await sendMessage(text);
       await setLastMessageId(messageId);
     } else {
@@ -105,21 +99,27 @@ async function sendOrEditMessage(text: string) {
   }
 }
 
-// -------------------- Cron para actualizar cada minuto --------------------
-
-Deno.cron("update-xrp", "*/1 * * * *", async () => {
+// -------------------- Loop interno en lugar de cron --------------------
+async function loop() {
   try {
     const prices = await getPrices();
-    if (!prices) return; // si falla CoinGecko, no hacer nada
-
-    const text = formatText(prices);
-    await sendOrEditMessage(text);
-    console.log("✅ Mensaje actualizado:", new Date().toISOString());
+    if (!prices) {
+      console.log("❌ No se pudo obtener precios, reintentando en 60s...");
+    } else {
+      const text = formatText(prices);
+      await sendOrEditMessage(text);
+      console.log("✅ Mensaje actualizado:", new Date().toISOString());
+    }
   } catch (e) {
-    console.error("❌ Error en cron:", e, e.stack);
+    console.error("❌ Error en loop:", e, e.stack);
+  } finally {
+    // Ejecutar de nuevo en 60 segundos
+    setTimeout(loop, 60_000);
   }
-});
+}
+
+// Iniciar loop
+loop();
 
 // -------------------- Servidor HTTP mínimo --------------------
-
 Deno.serve((_req) => new Response("Bot XRP corriendo ✅"));
