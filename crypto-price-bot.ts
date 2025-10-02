@@ -4,42 +4,41 @@ const CHAT_ID = Deno.env.get("TG_CHAT_ID")!; // ej: -123456789
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
 
-// Abrir Deno KV para guardar message_id
-const kv = await Deno.openKv();
+// -------------------- Funciones para Deno KV --------------------
 
-// Función para obtener el último message_id guardado
+// Abrir KV dentro de cada función para evitar problemas con top-level await
+async function getKv() {
+  return await Deno.openKv();
+}
+
 async function getLastMessageId(): Promise<number | null> {
+  const kv = await getKv();
   const res = await kv.get(["xrp_bot", "lastMessageId"]);
   return res.value ?? null;
 }
 
-// Función para guardar el message_id
 async function setLastMessageId(id: number) {
+  const kv = await getKv();
   await kv.set(["xrp_bot", "lastMessageId"], id);
 }
 
-// Obtener precios de XRP
-async function getPrices() {
-  const url = `${COINGECKO_URL}?ids=ripple&vs_currencies=usd,eur&include_24hr_change=true`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`CoinGecko error: ${res.status}`);
-  return await res.json() as { ripple: { usd: number; eur: number; usd_24h_change: number } };
+// -------------------- Funciones de Telegram --------------------
+
+async function sendMessage(text: string) {
+  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      chat_id: CHAT_ID,
+      text,
+      parse_mode: "HTML"
+    })
+  });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.description);
+  return j.result.message_id;
 }
 
-// Formatear texto del mensaje
-function formatText(data: ReturnType<typeof getPrices> extends Promise<infer R> ? R : any) {
-  const r = data.ripple;
-  return [
-    "📊 <b>XRP (Ripple)</b>",
-    `USD: <code>${r.usd}</code>`,
-    `EUR: <code>${r.eur}</code>`,
-    `Δ24h: <code>${r.usd_24h_change.toFixed(2)}%</code>`,
-    "",
-    `<i>Última actualización: ${new Date().toUTCString()}</i>`
-  ].join("\n");
-}
-
-// Editar mensaje existente
 async function editMessage(msgId: number, text: string) {
   const res = await fetch(`${TELEGRAM_API}/editMessageText`, {
     method: "POST",
@@ -56,23 +55,35 @@ async function editMessage(msgId: number, text: string) {
   return j;
 }
 
-// Enviar mensaje nuevo
-async function sendMessage(text: string) {
-  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: CHAT_ID,
-      text,
-      parse_mode: "HTML"
-    })
-  });
-  const j = await res.json();
-  if (!j.ok) throw new Error(j.description);
-  return j.result.message_id;
+// -------------------- Función de precios --------------------
+
+async function getPrices() {
+  const url = `${COINGECKO_URL}?ids=ripple&vs_currencies=usd,eur&include_24hr_change=true`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`CoinGecko error: ${res.status}`);
+    return await res.json() as { ripple: { usd: number; eur: number; usd_24h_change: number } };
+  } catch (e) {
+    console.error("❌ Error obteniendo precios:", e);
+    return null;
+  }
 }
 
-// Función que edita o envía según corresponda
+function formatText(data: { ripple: { usd: number; eur: number; usd_24h_change: number } }) {
+  const r = data.ripple;
+  const arrow = r.usd_24h_change >= 0 ? "⬆️" : "⬇️";
+  return [
+    "📊 <b>XRP (Ripple)</b>",
+    `USD: <code>${r.usd}</code>`,
+    `EUR: <code>${r.eur}</code>`,
+    `Δ24h: <code>${r.usd_24h_change.toFixed(2)}%</code> ${arrow}`,
+    "",
+    `<i>Última actualización: ${new Date().toUTCString()}</i>`
+  ].join("\n");
+}
+
+// -------------------- Función principal --------------------
+
 async function sendOrEditMessage(text: string) {
   let messageId = await getLastMessageId();
 
@@ -94,18 +105,21 @@ async function sendOrEditMessage(text: string) {
   }
 }
 
-// Cron oficial Deno: cada minuto
+// -------------------- Cron para actualizar cada minuto --------------------
+
 Deno.cron("update-xrp", "*/1 * * * *", async () => {
   try {
-    console.log("Actualizando precios...");
     const prices = await getPrices();
+    if (!prices) return; // si falla CoinGecko, no hacer nada
+
     const text = formatText(prices);
     await sendOrEditMessage(text);
     console.log("✅ Mensaje actualizado:", new Date().toISOString());
   } catch (e) {
-    console.error("❌ Error en cron:", e);
+    console.error("❌ Error en cron:", e, e.stack);
   }
 });
 
-// Servidor HTTP mínimo para que Deploy lo acepte
+// -------------------- Servidor HTTP mínimo --------------------
+
 Deno.serve((_req) => new Response("Bot XRP corriendo ✅"));
