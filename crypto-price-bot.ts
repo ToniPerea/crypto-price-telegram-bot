@@ -16,46 +16,65 @@ async function getKv() {
 }
 
 async function getLastMessage(): Promise<MessageData | null> {
-  const kv = await getKv();
-  const res = await kv.get(["xrp_bot", "lastMessage"]);
-  return res.value ?? null;
+  try {
+    const kv = await getKv();
+    const res = await kv.get(["xrp_bot", "lastMessage"]);
+    return res.value ?? null;
+  } catch (e) {
+    console.error("❌ Error leyendo KV:", e);
+    return null;
+  }
 }
 
 async function setLastMessage(id: number) {
-  const kv = await getKv();
-  await kv.set(["xrp_bot", "lastMessage"], { id, timestamp: Date.now() });
+  try {
+    const kv = await getKv();
+    await kv.set(["xrp_bot", "lastMessage"], { id, timestamp: Date.now() });
+  } catch (e) {
+    console.error("❌ Error guardando KV:", e);
+  }
 }
 
 // -------------------- Telegram --------------------
 async function sendMessage(text: string) {
-  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: CHAT_ID,
-      text,
-      parse_mode: "HTML"
-    })
-  });
-  const j = await res.json();
-  if (!j.ok) throw new Error(j.description);
-  return j.result.message_id;
+  try {
+    const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        text,
+        parse_mode: "HTML"
+      })
+    });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.description);
+    return j.result.message_id;
+  } catch (e) {
+    console.error("❌ Error enviando mensaje:", e);
+    throw e;
+  }
 }
 
 async function editMessage(msgId: number, text: string) {
-  const res = await fetch(`${TELEGRAM_API}/editMessageText`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: CHAT_ID,
-      message_id: msgId,
-      text,
-      parse_mode: "HTML"
-    })
-  });
-  const j = await res.json();
-  if (!j.ok) throw new Error(j.description);
-  return j;
+  try {
+    const res = await fetch(`${TELEGRAM_API}/editMessageText`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        message_id: msgId,
+        text,
+        parse_mode: "HTML"
+      })
+    });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.description);
+    return j;
+  } catch (e) {
+    console.error("❌ Error editando mensaje:", e);
+    throw e;
+  }
 }
 
 async function deleteMessage(msgId: number) {
@@ -74,8 +93,8 @@ async function deleteMessage(msgId: number) {
 
 // -------------------- CoinGecko --------------------
 async function getPrices() {
-  const url = `${COINGECKO_URL}?ids=ripple&vs_currencies=usd,eur&include_24hr_change=true`;
   try {
+    const url = `${COINGECKO_URL}?ids=ripple&vs_currencies=usd,eur&include_24hr_change=true`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`CoinGecko error: ${res.status}`);
     return await res.json() as { ripple: { usd: number; eur: number; usd_24h_change: number } };
@@ -100,40 +119,42 @@ function formatText(data: { ripple: { usd: number; eur: number; usd_24h_change: 
 
 // -------------------- Función principal --------------------
 async function sendOrUpdateMessage(text: string) {
-  let message = await getLastMessage();
+  try {
+    let message = await getLastMessage();
 
-  if (!message) {
-    // No hay mensaje previo, enviar uno nuevo
-    const id = await sendMessage(text);
-    await setLastMessage(id);
-    console.log("✅ Mensaje inicial enviado:", id);
-    return;
-  }
+    if (!message) {
+      // No hay mensaje previo, enviar uno nuevo
+      const id = await sendMessage(text);
+      await setLastMessage(id);
+      console.log("✅ Mensaje inicial enviado:", id);
+      return;
+    }
 
-  const ageMs = Date.now() - message.timestamp;
-  const ageHours = ageMs / 1000 / 3600;
+    const ageHours = (Date.now() - message.timestamp) / 1000 / 3600;
 
-  if (ageHours >= 24) {
-    // Mensaje viejo → borrar y enviar nuevo
-    await deleteMessage(message.id);
-    const id = await sendMessage(text);
-    await setLastMessage(id);
-    console.log("♻️ Mensaje viejo reemplazado por uno nuevo:", id);
-  } else {
-    // Mensaje reciente → intentar editar
-    try {
-      await editMessage(message.id, text);
-      console.log("✏️ Mensaje editado correctamente:", message.id);
-    } catch (e: any) {
-      if (e.message.includes("not found")) {
-        // Si no se encuentra el mensaje, enviar uno nuevo
-        const id = await sendMessage(text);
-        await setLastMessage(id);
-        console.log("❌ Mensaje no encontrado, enviado nuevo:", id);
-      } else {
-        console.error("❌ Error editando mensaje:", e);
+    if (ageHours >= 24) {
+      // Mensaje viejo → borrar y enviar nuevo
+      await deleteMessage(message.id);
+      const id = await sendMessage(text);
+      await setLastMessage(id);
+      console.log("♻️ Mensaje viejo reemplazado por nuevo:", id);
+    } else {
+      // Mensaje reciente → intentar editar
+      try {
+        await editMessage(message.id, text);
+        console.log("✏️ Mensaje editado correctamente:", message.id);
+      } catch (e: any) {
+        if (e.message.includes("not found")) {
+          const id = await sendMessage(text);
+          await setLastMessage(id);
+          console.log("❌ Mensaje no encontrado, enviado nuevo:", id);
+        } else {
+          console.error("❌ Error editando mensaje:", e);
+        }
       }
     }
+  } catch (e) {
+    console.error("❌ Error sendOrUpdateMessage:", e);
   }
 }
 
@@ -148,9 +169,9 @@ async function loop() {
       await sendOrUpdateMessage(text);
     }
   } catch (e) {
-    console.error("❌ Error en loop:", e, e.stack);
+    console.error("❌ Error inesperado en loop:", e, e.stack);
   } finally {
-    setTimeout(loop, 60_000); // volver a ejecutar en 60 segundos
+    setTimeout(loop, 60_000); // reintentar cada minuto
   }
 }
 
