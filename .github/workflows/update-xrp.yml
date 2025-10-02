@@ -25,6 +25,18 @@ jobs:
         with:
           deno-version: "1.x"
 
+      - name: Debug list git-action folder
+        run: |
+          echo "PWD: $(pwd)"
+          echo "Listing git-action:"
+          ls -la git-action || true
+          echo "Cat last_message.json (if exists):"
+          if [ -f git-action/last_message.json ]; then
+            cat git-action/last_message.json
+          else
+            echo "no file"
+          fi
+
       - name: Run bot script
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
