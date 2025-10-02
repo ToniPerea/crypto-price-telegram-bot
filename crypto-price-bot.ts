@@ -82,20 +82,28 @@ function formatText(data: { ripple: { usd: number; eur: number; usd_24h_change: 
 async function sendOrEditMessage(text: string) {
   let messageId = await getLastMessageId();
 
-  try {
-    if (messageId) {
+  if (messageId) {
+    try {
       await editMessage(messageId, text);
-    } else {
-      messageId = await sendMessage(text);
-      await setLastMessageId(messageId);
+      return; // editó correctamente
+    } catch (e: any) {
+      if (e.message.includes("not found")) {
+        console.log("❌ Mensaje anterior no encontrado, enviando uno nuevo...");
+        messageId = undefined; // forzar envío nuevo
+      } else {
+        console.error("❌ Error editando mensaje:", e);
+        return; // no continuar con loop
+      }
     }
-  } catch (e: any) {
-    if (e.message.includes("not found")) {
-      messageId = await sendMessage(text);
-      await setLastMessageId(messageId);
-    } else {
-      throw e;
-    }
+  }
+
+  // Si no hay messageId válido o edit falló, enviar uno nuevo
+  try {
+    messageId = await sendMessage(text);
+    await setLastMessageId(messageId);
+    console.log("✅ Nuevo mensaje enviado y guardado en KV:", messageId);
+  } catch (e) {
+    console.error("❌ Error enviando mensaje nuevo:", e);
   }
 }
 
