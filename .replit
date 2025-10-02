@@ -34,10 +34,6 @@ outputType = "console"
 localPort = 8000
 externalPort = 8000
 
-[[ports]]
-localPort = 46183
-externalPort = 80
-
 [deployment]
 deploymentTarget = "vm"
 run = ["deno", "run", "--unstable-kv", "--unstable-cron", "--allow-net", "--allow-env", "typescript/crypto-price-bot.ts"]
