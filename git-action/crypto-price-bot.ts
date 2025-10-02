@@ -1,4 +1,4 @@
-// crypto-price-bot.ts - compatible Deno Deploy <-> GitHub Actions
+// git-action/crypto-price-bot.ts (versión reforzada para asegurarnos que last_message.json se crea)
 const BOT_TOKEN = Deno.env.get("TG_BOT_TOKEN")!;
 const CHAT_ID = Deno.env.get("TG_CHAT_ID")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -10,16 +10,28 @@ interface MessageData {
 }
 
 const IS_GITHUB_ACTIONS = Deno.env.get("GITHUB_ACTIONS") === "true";
-const GITHUB_WORKSPACE = Deno.env.get("GITHUB_WORKSPACE") ?? "."; // en Actions apunta al workspace
-const LAST_MESSAGE_FILE = `${GITHUB_WORKSPACE}/.github/last_message.json`;
+const GITHUB_WORKSPACE = Deno.env.get("GITHUB_WORKSPACE") ?? ".";
+const LAST_MESSAGE_FILE = `${GITHUB_WORKSPACE}/git-action/last_message.json`;
 
 // -------------------- Storage (KV en Deploy, fichero en Actions) --------------------
+async function ensureDir(path: string) {
+  try {
+    await Deno.mkdir(path, { recursive: true });
+  } catch (e) {
+    if ((e as any).code !== "EEXIST") {
+      console.error("Error creando directorio", path, e);
+    }
+  }
+}
+
 async function getLastMessage(): Promise<MessageData | null> {
   if (IS_GITHUB_ACTIONS) {
     try {
       const txt = await Deno.readTextFile(LAST_MESSAGE_FILE);
+      console.log("DEBUG: leido last_message.json:", txt);
       return JSON.parse(txt) as MessageData;
-    } catch {
+    } catch (e) {
+      console.log("DEBUG: no existe last_message.json o error leyendolo:", String(e));
       return null;
     }
   } else {
@@ -38,11 +50,13 @@ async function setLastMessage(id: number) {
   const payload: MessageData = { id, timestamp: Date.now() };
   if (IS_GITHUB_ACTIONS) {
     try {
-      // Asegurarnos de que la carpeta existe
-      try { await Deno.readDir(`${GITHUB_WORKSPACE}/.github`); } catch { await Deno.mkdir(`${GITHUB_WORKSPACE}/.github`, { recursive: true }); }
-      await Deno.writeTextFile(LAST_MESSAGE_FILE, JSON.stringify(payload));
+      const dir = `${GITHUB_WORKSPACE}/git-action`;
+      await ensureDir(dir);
+      await Deno.writeTextFile(LAST_MESSAGE_FILE, JSON.stringify(payload, null, 2));
+      console.log("DEBUG: escrito last_message.json en", LAST_MESSAGE_FILE);
     } catch (e) {
       console.error("Error guardando fichero last_message:", e);
+      throw e; // no silenciamos: queremos ver fallos en Actions
     }
   } else {
     try {
@@ -169,7 +183,7 @@ async function sendOrUpdateMessage(text: string) {
   if (!message) {
     const id = await sendMessage(text);
     await setLastMessage(id);
-    await pinMessage(id);
+    try { await pinMessage(id); } catch {}
     console.log("Mensaje inicial enviado:", id);
     return;
   }
@@ -177,28 +191,24 @@ async function sendOrUpdateMessage(text: string) {
   const ageHours = (now - message.timestamp) / 1000 / 3600;
 
   if (ageHours >= 46) {
-    // Despinear y borrar el mensaje antiguo
     try { await unpinMessage(message.id); } catch {}
     try { await deleteMessage(message.id); } catch {}
     const id = await sendMessage(text);
     await setLastMessage(id);
-    await pinMessage(id);
+    try { await pinMessage(id); } catch {}
     console.log("Mensaje viejo reemplazado:", id);
   } else {
     try {
       await editMessage(message.id, text);
-      // asegurar pineado
       try { await pinMessage(message.id); } catch {}
       console.log("Mensaje editado:", message.id);
     } catch (e: any) {
+      console.error("Error editando:", e);
       if (String(e).includes("not found") || String(e).includes("Bad Request")) {
-        // enviar nuevo si no existe
         const id = await sendMessage(text);
         await setLastMessage(id);
-        await pinMessage(id);
+        try { await pinMessage(id); } catch {}
         console.log("Mensaje no encontrado, enviado nuevo:", id);
-      } else {
-        console.error("Error editando mensaje:", e);
       }
     }
   }
@@ -206,18 +216,36 @@ async function sendOrUpdateMessage(text: string) {
 
 // -------------------- Entrypoint --------------------
 if (IS_GITHUB_ACTIONS) {
-  // En Actions ejecutamos una sola vez (no loop). El workflow se encarga del schedule.
   (async () => {
     try {
+      console.log("DEBUG: Entrando en job de GitHub Actions");
+      console.log("DEBUG: GITHUB_WORKSPACE=", GITHUB_WORKSPACE);
+      // mostrar listado previo (útil para logs)
+      try {
+        for await (const f of Deno.readDir(`${GITHUB_WORKSPACE}/git-action`)) {
+          console.log("DIR:", f.name);
+        }
+      } catch (e) {
+        console.log("DEBUG: git-action dir no existe todavía");
+      }
+
       const prices = await getPrices();
       const text = formatText(prices);
       await sendOrUpdateMessage(text);
+
+      // después de todo, ver si escribimos el fichero
+      try {
+        const exists = await Deno.readTextFile(LAST_MESSAGE_FILE);
+        console.log("DEBUG: contenido final de last_message.json:", exists);
+      } catch (e) {
+        console.error("DEBUG: last_message.json NO creado:", e);
+      }
     } catch (e) {
       console.error("Error en job Actions:", e);
+      Deno.exit(1);
     }
   })();
 } else {
-  // En Deno Deploy o local: mantenemos loop para compatibilidad
   (async function loop() {
     try {
       const prices = await getPrices();
