@@ -1,6 +1,7 @@
 // crypto-price-bot.ts - Bot de Telegram en TypeScript para Deno Deploy
 const BOT_TOKEN = Deno.env.get("TG_BOT_TOKEN")!;
 const CHAT_ID = Deno.env.get("TG_CHAT_ID")!; // ej: -123456789
+const MESSAGE_ID = parseInt(Deno.env.get("TG_MESSAGE_ID")!); // ID del mensaje a editar
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
 
@@ -25,30 +26,9 @@ function formatText(data: ReturnType<typeof getPrices> extends Promise<infer R> 
   ].join("\n");
 }
 
-// Obtener o crear message_id en KV
-async function ensureMessageId(kv: Deno.Kv): Promise<number> {
-  const key: [string, string, string] = ["telegram", "xrp", "msg_id"];
-  const entry = await kv.get(key);
-  if (entry.value) return entry.value as number;
-
-  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: CHAT_ID,
-      text: "Iniciando monitor de XRP... ⏳",
-      parse_mode: "HTML"
-    })
-  });
-  const j = await res.json();
-  const msgId = j.result.message_id as number;
-  await kv.set(key, msgId);
-  return msgId;
-}
-
 // Editar mensaje existente
 async function editMessage(msgId: number, text: string) {
-  await fetch(`${TELEGRAM_API}/editMessageText`, {
+  const res = await fetch(`${TELEGRAM_API}/editMessageText`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -58,21 +38,27 @@ async function editMessage(msgId: number, text: string) {
       parse_mode: "HTML"
     })
   });
+  
+  const j = await res.json();
+  
+  if (!j.ok) {
+    console.error("Error editando mensaje:", j.description);
+    throw new Error(`Telegram error: ${j.description}`);
+  }
+  
+  return j;
 }
 
-// Cron oficial Deno: cada minuto
+// Cron oficial Deno: cada minuto (minuto hora día mes día-semana)
 Deno.cron("update-xrp", "*/1 * * * *", async () => {
-  const kv = await Deno.openKv();
   try {
-    const msgId = await ensureMessageId(kv);
+    console.log("Actualizando precios...");
     const prices = await getPrices();
     const text = formatText(prices);
-    await editMessage(msgId, text);
-    console.log("Mensaje actualizado:", new Date().toISOString());
+    await editMessage(MESSAGE_ID, text);
+    console.log("✅ Mensaje actualizado:", new Date().toISOString());
   } catch (e) {
-    console.error("Error en cron:", e);
-  } finally {
-    kv.close?.();
+    console.error("❌ Error en cron:", e);
   }
 });
 
