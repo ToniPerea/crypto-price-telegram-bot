@@ -2,8 +2,8 @@ name: Update Crypto Prices (every 5 min)
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # cada 5 minutos
-  workflow_dispatch:       # también permite ejecución manual
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   update:
@@ -13,52 +13,22 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download last-message artifact (if exists)
-        uses: actions/download-artifact@v4
-        with:
-          name: last-message
-          path: git-action
-        continue-on-error: true
-
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
           deno-version: "1.x"
 
-      - name: Debug list git-action folder
-        run: |
-          echo "PWD: $(pwd)"
-          echo "Listing git-action:"
-          ls -la git-action || true
-          echo "Cat last_message.json (if exists):"
-          if [ -f git-action/last_message.json ]; then
-            cat git-action/last_message.json
-          else
-            echo "no file"
-          fi
-
       - name: Run bot script
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          GITHUB_ACTIONS: "true"
-          GITHUB_WORKSPACE: ${{ github.workspace }}
         run: |
-          deno cache git-action/crypto-price-bot.ts
           deno run --allow-net --allow-env --allow-read --allow-write --unstable git-action/crypto-price-bot.ts
 
-      - name: Check if last_message.json exists
-        id: check
+      - name: Commit last_message.json
         run: |
-          if [ -f git-action/last_message.json ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Upload last-message artifact (if file exists)
-        if: steps.check.outputs.exists == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: last-message
-          path: git-action/last_message.json
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add git-action/last_message.json
+          git diff --cached --quiet || git commit -m "Update last_message.json [skip ci]"
+          git push origin HEAD:${{ github.ref }}
