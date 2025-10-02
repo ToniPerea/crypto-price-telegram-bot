@@ -1,4 +1,4 @@
-// git-action/crypto-price-bot.ts (versión reforzada para asegurarnos que last_message.json se crea)
+// git-action/crypto-price-bot.ts - Bot de precios de criptomonedas para Telegram
 const BOT_TOKEN = Deno.env.get("TG_BOT_TOKEN")!;
 const CHAT_ID = Deno.env.get("TG_CHAT_ID")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -9,62 +9,25 @@ interface MessageData {
   timestamp: number;
 }
 
-const IS_GITHUB_ACTIONS = Deno.env.get("GITHUB_ACTIONS") === "true";
-const GITHUB_WORKSPACE = Deno.env.get("GITHUB_WORKSPACE") ?? ".";
-const LAST_MESSAGE_FILE = `${GITHUB_WORKSPACE}/git-action/last_message.json`;
+const LAST_MESSAGE_FILE = "./git-action/last_message.json";
 
-// -------------------- Storage (KV en Deploy, fichero en Actions) --------------------
-async function ensureDir(path: string) {
-  try {
-    await Deno.mkdir(path, { recursive: true });
-  } catch (e) {
-    if ((e as any).code !== "EEXIST") {
-      console.error("Error creando directorio", path, e);
-    }
-  }
-}
-
+// -------------------- Storage --------------------
 async function getLastMessage(): Promise<MessageData | null> {
-  if (IS_GITHUB_ACTIONS) {
-    try {
-      const txt = await Deno.readTextFile(LAST_MESSAGE_FILE);
-      console.log("DEBUG: leido last_message.json:", txt);
-      return JSON.parse(txt) as MessageData;
-    } catch (e) {
-      console.log("DEBUG: no existe last_message.json o error leyendolo:", String(e));
-      return null;
-    }
-  } else {
-    try {
-      const kv = await Deno.openKv();
-      const res = await kv.get(["xrp_bot", "lastMessage"]);
-      return res.value ?? null;
-    } catch (e) {
-      console.error("Error leyendo KV:", e);
-      return null;
-    }
+  try {
+    const txt = await Deno.readTextFile(LAST_MESSAGE_FILE);
+    return JSON.parse(txt) as MessageData;
+  } catch {
+    return null;
   }
 }
 
 async function setLastMessage(id: number) {
   const payload: MessageData = { id, timestamp: Date.now() };
-  if (IS_GITHUB_ACTIONS) {
-    try {
-      const dir = `${GITHUB_WORKSPACE}/git-action`;
-      await ensureDir(dir);
-      await Deno.writeTextFile(LAST_MESSAGE_FILE, JSON.stringify(payload, null, 2));
-      console.log("DEBUG: escrito last_message.json en", LAST_MESSAGE_FILE);
-    } catch (e) {
-      console.error("Error guardando fichero last_message:", e);
-      throw e; // no silenciamos: queremos ver fallos en Actions
-    }
-  } else {
-    try {
-      const kv = await Deno.openKv();
-      await kv.set(["xrp_bot", "lastMessage"], payload);
-    } catch (e) {
-      console.error("Error guardando KV:", e);
-    }
+  try {
+    await Deno.writeTextFile(LAST_MESSAGE_FILE, JSON.stringify(payload, null, 2));
+    console.log("DEBUG: escrito last_message.json");
+  } catch (e) {
+    console.error("Error escribiendo last_message.json:", e);
   }
 }
 
@@ -183,7 +146,7 @@ async function sendOrUpdateMessage(text: string) {
   if (!message) {
     const id = await sendMessage(text);
     await setLastMessage(id);
-    try { await pinMessage(id); } catch {}
+    await pinMessage(id);
     console.log("Mensaje inicial enviado:", id);
     return;
   }
@@ -191,23 +154,23 @@ async function sendOrUpdateMessage(text: string) {
   const ageHours = (now - message.timestamp) / 1000 / 3600;
 
   if (ageHours >= 46) {
-    try { await unpinMessage(message.id); } catch {}
-    try { await deleteMessage(message.id); } catch {}
+    await unpinMessage(message.id).catch(() => {});
+    await deleteMessage(message.id).catch(() => {});
     const id = await sendMessage(text);
     await setLastMessage(id);
-    try { await pinMessage(id); } catch {}
+    await pinMessage(id);
     console.log("Mensaje viejo reemplazado:", id);
   } else {
     try {
       await editMessage(message.id, text);
-      try { await pinMessage(message.id); } catch {}
+      await pinMessage(message.id);
       console.log("Mensaje editado:", message.id);
     } catch (e: any) {
-      console.error("Error editando:", e);
+      console.error("Error editando mensaje:", e);
       if (String(e).includes("not found") || String(e).includes("Bad Request")) {
         const id = await sendMessage(text);
         await setLastMessage(id);
-        try { await pinMessage(id); } catch {}
+        await pinMessage(id);
         console.log("Mensaje no encontrado, enviado nuevo:", id);
       }
     }
@@ -215,47 +178,12 @@ async function sendOrUpdateMessage(text: string) {
 }
 
 // -------------------- Entrypoint --------------------
-if (IS_GITHUB_ACTIONS) {
-  (async () => {
-    try {
-      console.log("DEBUG: Entrando en job de GitHub Actions");
-      console.log("DEBUG: GITHUB_WORKSPACE=", GITHUB_WORKSPACE);
-      // mostrar listado previo (útil para logs)
-      try {
-        for await (const f of Deno.readDir(`${GITHUB_WORKSPACE}/git-action`)) {
-          console.log("DIR:", f.name);
-        }
-      } catch (e) {
-        console.log("DEBUG: git-action dir no existe todavía");
-      }
-
-      const prices = await getPrices();
-      const text = formatText(prices);
-      await sendOrUpdateMessage(text);
-
-      // después de todo, ver si escribimos el fichero
-      try {
-        const exists = await Deno.readTextFile(LAST_MESSAGE_FILE);
-        console.log("DEBUG: contenido final de last_message.json:", exists);
-      } catch (e) {
-        console.error("DEBUG: last_message.json NO creado:", e);
-      }
-    } catch (e) {
-      console.error("Error en job Actions:", e);
-      Deno.exit(1);
-    }
-  })();
-} else {
-  (async function loop() {
-    try {
-      const prices = await getPrices();
-      const text = formatText(prices);
-      await sendOrUpdateMessage(text);
-    } catch (e) {
-      console.error("Error en loop:", e);
-    } finally {
-      setTimeout(loop, 60_000);
-    }
-  })();
-  Deno.serve((_req) => new Response("Bot corriendo ✅"));
-}
+(async () => {
+  try {
+    const prices = await getPrices();
+    const text = formatText(prices);
+    await sendOrUpdateMessage(text);
+  } catch (e) {
+    console.error("Error en bot:", e);
+  }
+})();
