@@ -1,26 +1,32 @@
 // crypto-price-bot.ts - Bot de Telegram en TypeScript para Deno Deploy
 const BOT_TOKEN = Deno.env.get("TG_BOT_TOKEN")!;
-const CHAT_ID = Deno.env.get("TG_CHAT_ID")!; // ej: -123456789
+const CHAT_ID = Deno.env.get("TG_CHAT_ID")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
 
-// -------------------- Funciones para Deno KV --------------------
+// -------------------- Interfaces --------------------
+interface MessageData {
+  id: number;
+  timestamp: number; // ms desde epoch
+}
+
+// -------------------- Deno KV --------------------
 async function getKv() {
   return await Deno.openKv();
 }
 
-async function getLastMessageId(): Promise<number | null> {
+async function getLastMessage(): Promise<MessageData | null> {
   const kv = await getKv();
-  const res = await kv.get(["xrp_bot", "lastMessageId"]);
+  const res = await kv.get(["xrp_bot", "lastMessage"]);
   return res.value ?? null;
 }
 
-async function setLastMessageId(id: number) {
+async function setLastMessage(id: number) {
   const kv = await getKv();
-  await kv.set(["xrp_bot", "lastMessageId"], id);
+  await kv.set(["xrp_bot", "lastMessage"], { id, timestamp: Date.now() });
 }
 
-// -------------------- Funciones de Telegram --------------------
+// -------------------- Telegram --------------------
 async function sendMessage(text: string) {
   const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
@@ -52,7 +58,21 @@ async function editMessage(msgId: number, text: string) {
   return j;
 }
 
-// -------------------- Función de precios --------------------
+async function deleteMessage(msgId: number) {
+  try {
+    const res = await fetch(`${TELEGRAM_API}/deleteMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: CHAT_ID, message_id: msgId })
+    });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.description);
+  } catch (e) {
+    console.error("❌ Error borrando mensaje:", e);
+  }
+}
+
+// -------------------- CoinGecko --------------------
 async function getPrices() {
   const url = `${COINGECKO_URL}?ids=ripple&vs_currencies=usd,eur&include_24hr_change=true`;
   try {
@@ -79,35 +99,45 @@ function formatText(data: { ripple: { usd: number; eur: number; usd_24h_change: 
 }
 
 // -------------------- Función principal --------------------
-async function sendOrEditMessage(text: string) {
-  let messageId = await getLastMessageId();
+async function sendOrUpdateMessage(text: string) {
+  let message = await getLastMessage();
 
-  if (messageId) {
+  if (!message) {
+    // No hay mensaje previo, enviar uno nuevo
+    const id = await sendMessage(text);
+    await setLastMessage(id);
+    console.log("✅ Mensaje inicial enviado:", id);
+    return;
+  }
+
+  const ageMs = Date.now() - message.timestamp;
+  const ageHours = ageMs / 1000 / 3600;
+
+  if (ageHours >= 24) {
+    // Mensaje viejo → borrar y enviar nuevo
+    await deleteMessage(message.id);
+    const id = await sendMessage(text);
+    await setLastMessage(id);
+    console.log("♻️ Mensaje viejo reemplazado por uno nuevo:", id);
+  } else {
+    // Mensaje reciente → intentar editar
     try {
-      await editMessage(messageId, text);
-      return; // editó correctamente
+      await editMessage(message.id, text);
+      console.log("✏️ Mensaje editado correctamente:", message.id);
     } catch (e: any) {
       if (e.message.includes("not found")) {
-        console.log("❌ Mensaje anterior no encontrado, enviando uno nuevo...");
-        messageId = undefined; // forzar envío nuevo
+        // Si no se encuentra el mensaje, enviar uno nuevo
+        const id = await sendMessage(text);
+        await setLastMessage(id);
+        console.log("❌ Mensaje no encontrado, enviado nuevo:", id);
       } else {
         console.error("❌ Error editando mensaje:", e);
-        return; // no continuar con loop
       }
     }
   }
-
-  // Si no hay messageId válido o edit falló, enviar uno nuevo
-  try {
-    messageId = await sendMessage(text);
-    await setLastMessageId(messageId);
-    console.log("✅ Nuevo mensaje enviado y guardado en KV:", messageId);
-  } catch (e) {
-    console.error("❌ Error enviando mensaje nuevo:", e);
-  }
 }
 
-// -------------------- Loop interno en lugar de cron --------------------
+// -------------------- Loop interno --------------------
 async function loop() {
   try {
     const prices = await getPrices();
@@ -115,14 +145,12 @@ async function loop() {
       console.log("❌ No se pudo obtener precios, reintentando en 60s...");
     } else {
       const text = formatText(prices);
-      await sendOrEditMessage(text);
-      console.log("✅ Mensaje actualizado:", new Date().toISOString());
+      await sendOrUpdateMessage(text);
     }
   } catch (e) {
     console.error("❌ Error en loop:", e, e.stack);
   } finally {
-    // Ejecutar de nuevo en 60 segundos
-    setTimeout(loop, 60_000);
+    setTimeout(loop, 60_000); // volver a ejecutar en 60 segundos
   }
 }
 
