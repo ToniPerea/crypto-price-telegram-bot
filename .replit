@@ -22,13 +22,13 @@ args = "Crypto Price Bot"
 name = "Crypto Price Bot"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd typescript && deno run --unstable-kv --unstable-cron --allow-net --allow-env crypto-price-bot.ts"
-waitForPort = 8000
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "deno run --unstable-kv --unstable-cron --allow-net --allow-env crypto-price-bot.ts"
+waitForPort = 8000
 
 [[ports]]
 localPort = 8000
