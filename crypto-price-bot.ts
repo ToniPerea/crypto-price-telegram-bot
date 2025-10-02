@@ -63,16 +63,19 @@ async function sendMessage(text: string) {
 
 // Función que edita o envía según corresponda
 async function sendOrEditMessage(text: string) {
+  let messageId = await getLastMessageId();
+
   try {
-    if (lastMessageId) {
-      await editMessage(lastMessageId, text);
+    if (messageId) {
+      await editMessage(messageId, text);
     } else {
-      lastMessageId = await sendMessage(text);
+      messageId = await sendMessage(text);
+      await setLastMessageId(messageId);
     }
   } catch (e: any) {
     if (e.message.includes("not found")) {
-      // Si no se encuentra el mensaje, enviar uno nuevo
-      lastMessageId = await sendMessage(text);
+      messageId = await sendMessage(text);
+      await setLastMessageId(messageId);
     } else {
       throw e;
     }
@@ -82,15 +85,15 @@ async function sendOrEditMessage(text: string) {
 // Cron oficial Deno: cada minuto
 Deno.cron("update-xrp", "*/1 * * * *", async () => {
   try {
-    console.log("Actualizando precios...");
     const prices = await getPrices();
     const text = formatText(prices);
-    await sendOrEditMessage(text);
+    await sendOrEditMessage(text); // esta función ahora maneja not found
     console.log("✅ Mensaje actualizado:", new Date().toISOString());
   } catch (e) {
     console.error("❌ Error en cron:", e);
   }
 });
+
 
 // Servidor HTTP mínimo para que Deploy lo acepte
 Deno.serve((_req) => new Response("Bot XRP corriendo ✅"));
