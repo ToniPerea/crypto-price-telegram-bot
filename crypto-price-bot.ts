@@ -99,22 +99,39 @@ async function unpinMessage(msgId: number) {
 
 // -------------------- CoinGecko --------------------
 async function getPrices() {
-  const res = await fetch(`${COINGECKO_URL}?ids=ripple&vs_currencies=usd,eur&include_24hr_change=true`);
+  const ids = "bitcoin,ripple,linea,stellar,cardano";
+  const res = await fetch(`${COINGECKO_URL}?ids=${ids}&vs_currencies=usd,eur&include_24hr_change=true`);
   if (!res.ok) throw new Error(`CoinGecko error: ${res.status}`);
-  return await res.json() as { ripple: { usd: number; eur: number; usd_24h_change: number } };
+  return await res.json();
 }
 
-function formatText(data: { ripple: { usd: number; eur: number; usd_24h_change: number } }) {
-  const r = data.ripple;
-  const arrow = r.usd_24h_change >= 0 ? "⬆️" : "⬇️";
-  return [
-    "📊 <b>XRP (Ripple)</b>",
-    `USD: <code>${r.usd}</code>`,
-    `EUR: <code>${r.eur}</code>`,
-    `Δ24h: <code>${r.usd_24h_change.toFixed(2)}%</code> ${arrow}`,
-    "",
-    `<i>Última actualización: ${new Date().toUTCString()}</i>`
-  ].join("\n");
+function formatText(data: any) {
+  const coins = [
+    { id: "bitcoin", symbol: "BTC", name: "Bitcoin", emoji: "₿" },
+    { id: "ripple", symbol: "XRP", name: "Ripple", emoji: "💧" },
+    { id: "linea", symbol: "LINEA", name: "Linea", emoji: "🔷" },
+    { id: "stellar", symbol: "XLM", name: "Stellar", emoji: "🌟" },
+    { id: "cardano", symbol: "ADA", name: "Cardano", emoji: "🔵" }
+  ];
+
+  const lines = ["📊 <b>Precios de Criptomonedas</b>", ""];
+
+  for (const coin of coins) {
+    const d = data[coin.id];
+    if (d) {
+      const arrow = d.usd_24h_change >= 0 ? "⬆️" : "⬇️";
+      lines.push(
+        `${coin.emoji} <b>${coin.symbol}</b>`,
+        `USD: <code>$${d.usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</code>`,
+        `EUR: <code>€${d.eur.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</code>`,
+        `Δ24h: <code>${d.usd_24h_change.toFixed(2)}%</code> ${arrow}`,
+        ""
+      );
+    }
+  }
+
+  lines.push(`<i>Última actualización: ${new Date().toUTCString()}</i>`);
+  return lines.join("\n");
 }
 
 // -------------------- Enviar o actualizar mensaje --------------------
