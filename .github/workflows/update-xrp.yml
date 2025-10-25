@@ -29,6 +29,8 @@ jobs:
           PERSON_1_VALUE: ${{ secrets.PERSON_1_VALUE }}
           PERSON_2_NAME: ${{ secrets.PERSON_2_NAME }}
           PERSON_2_VALUE: ${{ secrets.PERSON_2_VALUE }}
+          PERSON_3_NAME: ${{ secrets.PERSON_3_NAME }}
+          PERSON_3_VALUE: ${{ secrets.PERSON_3_VALUE }}
         run: |
           deno run --allow-net --allow-env --allow-read --allow-write --unstable git-action/crypto-price-bot.ts
 
