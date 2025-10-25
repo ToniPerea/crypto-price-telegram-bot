@@ -8,6 +8,8 @@ const PERSON_1_NAME = Deno.env.get("PERSON_1_NAME");
 const PERSON_1_VALUE = Deno.env.get("PERSON_1_VALUE");
 const PERSON_2_NAME = Deno.env.get("PERSON_2_NAME");
 const PERSON_2_VALUE = Deno.env.get("PERSON_2_VALUE");
+const PERSON_3_NAME = Deno.env.get("PERSON_3_NAME");
+const PERSON_3_VALUE = Deno.env.get("PERSON_3_VALUE");
 
 interface MessageData {
   id: number;
@@ -160,6 +162,10 @@ function formatText(data: any) {
 
     if (PERSON_2_NAME && PERSON_2_VALUE) {
       lines.push(...formatPersonPortfolio(PERSON_2_NAME, parseFloat(PERSON_2_VALUE), xrpData));
+    }
+
+    if (PERSON_3_NAME && PERSON_3_VALUE) {
+      lines.push(...formatPersonPortfolio(PERSON_3_NAME, parseFloat(PERSON_3_VALUE), xrpData));
     }
   }
 
