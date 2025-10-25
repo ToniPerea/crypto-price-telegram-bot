@@ -25,6 +25,10 @@ jobs:
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PERSON_1_NAME: ${{ secrets.PERSON_1_NAME }}
+          PERSON_1_VALUE: ${{ secrets.PERSON_1_VALUE }}
+          PERSON_2_NAME: ${{ secrets.PERSON_2_NAME }}
+          PERSON_2_VALUE: ${{ secrets.PERSON_2_VALUE }}
         run: |
           deno run --allow-net --allow-env --allow-read --allow-write --unstable git-action/crypto-price-bot.ts
 
