@@ -4,6 +4,11 @@ const CHAT_ID = Deno.env.get("TG_CHAT_ID")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
 
+const PERSON_1_NAME = Deno.env.get("PERSON_1_NAME");
+const PERSON_1_VALUE = Deno.env.get("PERSON_1_VALUE");
+const PERSON_2_NAME = Deno.env.get("PERSON_2_NAME");
+const PERSON_2_VALUE = Deno.env.get("PERSON_2_VALUE");
+
 interface MessageData {
   id: number;
   timestamp: number;
@@ -104,6 +109,20 @@ async function getPrices() {
   return await res.json();
 }
 
+function formatPersonPortfolio(name: string, amount: number, xrpData: any): string[] {
+  const valueEur = amount * xrpData.eur;
+  const change24h = (valueEur * xrpData.usd_24h_change) / 100;
+  const arrow = change24h >= 0 ? "⬆️" : "⬇️";
+  
+  return [
+    `💼 <b>${name}</b>`,
+    `XRP: <code>${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XRP</code>`,
+    `Valor: <code>€${valueEur.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</code>`,
+    `Δ24h: <code>€${Math.abs(change24h).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${xrpData.usd_24h_change.toFixed(2)}%)</code> ${arrow}`,
+    ""
+  ];
+}
+
 function formatText(data: any) {
   const coins = [
     { id: "bitcoin", symbol: "BTC", emoji: "₿" },
@@ -126,6 +145,21 @@ function formatText(data: any) {
         `Δ24h: <code>${Number(d.usd_24h_change).toFixed(2)}%</code> ${arrow}`,
         ""
       );
+    }
+  }
+
+  // Sección de portfolios personales
+  const xrpData = data["ripple"];
+  if (xrpData && (PERSON_1_NAME || PERSON_2_NAME)) {
+    lines.push("─────────────────────────", "");
+    lines.push("👥 <b>Portfolios XRP</b>", "");
+
+    if (PERSON_1_NAME && PERSON_1_VALUE) {
+      lines.push(...formatPersonPortfolio(PERSON_1_NAME, parseFloat(PERSON_1_VALUE), xrpData));
+    }
+
+    if (PERSON_2_NAME && PERSON_2_VALUE) {
+      lines.push(...formatPersonPortfolio(PERSON_2_NAME, parseFloat(PERSON_2_VALUE), xrpData));
     }
   }
 
