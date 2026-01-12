@@ -4,14 +4,14 @@ const CHAT_ID = Deno.env.get("TG_CHAT_ID")!;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
 
-const PERSON_1_NAME = Deno.env.get("PERSON_1_NAME");
-const PERSON_1_VALUE = Deno.env.get("PERSON_1_VALUE");
-const PERSON_2_NAME = Deno.env.get("PERSON_2_NAME");
-const PERSON_2_VALUE = Deno.env.get("PERSON_2_VALUE");
-const PERSON_3_NAME = Deno.env.get("PERSON_3_NAME");
-const PERSON_3_VALUE = Deno.env.get("PERSON_3_VALUE");
-const PERSON_4_NAME = Deno.env.get("PERSON_4_NAME");
-const PERSON_4_VALUE = Deno.env.get("PERSON_4_VALUE");
+// const PERSON_1_NAME = Deno.env.get("PERSON_1_NAME");
+// const PERSON_1_VALUE = Deno.env.get("PERSON_1_VALUE");
+// const PERSON_2_NAME = Deno.env.get("PERSON_2_NAME");
+// const PERSON_2_VALUE = Deno.env.get("PERSON_2_VALUE");
+// const PERSON_3_NAME = Deno.env.get("PERSON_3_NAME");
+// const PERSON_3_VALUE = Deno.env.get("PERSON_3_VALUE");
+// const PERSON_4_NAME = Deno.env.get("PERSON_4_NAME");
+// const PERSON_4_VALUE = Deno.env.get("PERSON_4_VALUE");
 
 interface MessageData {
   id: number;
@@ -153,27 +153,27 @@ function formatText(data: any) {
   }
 
   // Sección de portfolios personales
-  const xrpData = data["ripple"];
-  if (xrpData && (PERSON_1_NAME || PERSON_2_NAME)) {
-    lines.push("─────────────────────────", "");
-    lines.push("👥 <b>Portfolios XRP</b>", "");
+  // const xrpData = data["ripple"];
+  // if (xrpData && (PERSON_1_NAME || PERSON_2_NAME)) {
+    // lines.push("─────────────────────────", "");
+    // lines.push("👥 <b>Portfolios XRP</b>", "");
 
-    if (PERSON_1_NAME && PERSON_1_VALUE) {
-      lines.push(...formatPersonPortfolio(PERSON_1_NAME, parseFloat(PERSON_1_VALUE), xrpData));
-    }
+    // if (PERSON_1_NAME && PERSON_1_VALUE) {
+      // lines.push(...formatPersonPortfolio(PERSON_1_NAME, parseFloat(PERSON_1_VALUE), xrpData));
+    // }
 
-    if (PERSON_2_NAME && PERSON_2_VALUE) {
-      lines.push(...formatPersonPortfolio(PERSON_2_NAME, parseFloat(PERSON_2_VALUE), xrpData));
-    }
+    // if (PERSON_2_NAME && PERSON_2_VALUE) {
+      // lines.push(...formatPersonPortfolio(PERSON_2_NAME, parseFloat(PERSON_2_VALUE), xrpData));
+    // }
 
-    if (PERSON_3_NAME && PERSON_3_VALUE) {
-      lines.push(...formatPersonPortfolio(PERSON_3_NAME, parseFloat(PERSON_3_VALUE), xrpData));
-    }
+    // if (PERSON_3_NAME && PERSON_3_VALUE) {
+      // lines.push(...formatPersonPortfolio(PERSON_3_NAME, parseFloat(PERSON_3_VALUE), xrpData));
+    // }
 
-    if (PERSON_4_NAME && PERSON_4_VALUE) {
-      lines.push(...formatPersonPortfolio(PERSON_4_NAME, parseFloat(PERSON_4_VALUE), xrpData));
-    }
-  }
+    // if (PERSON_4_NAME && PERSON_4_VALUE) {
+      // lines.push(...formatPersonPortfolio(PERSON_4_NAME, parseFloat(PERSON_4_VALUE), xrpData));
+    // }
+  // }
 
   const spainTime = new Date().toLocaleString('es-ES', {
     timeZone: 'Europe/Madrid',
